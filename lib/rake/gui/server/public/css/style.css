@@ -1,0 +1,15 @@
+pre {
+    color: white;
+    background-color: #222;
+}
+
+.executor {
+    width: 15px;
+    height: 15px;
+    border: solid black 1px;
+    display: inline-block;
+}
+
+#search_form {
+    margin: 0 15px 0 15px;
+}

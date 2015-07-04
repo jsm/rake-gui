@@ -1,0 +1,30 @@
+:javascript
+  var es_access = new EventSource('/server_access_stream');
+  es_access.onmessage = function(e) {
+    $('#access_log').append(e.data);
+  };
+  es_access.onerror = function(e) {
+    console.log(e.message);
+  };
+  var es_access = new EventSource('/server_error_stream');
+  es_access.onmessage = function(e) {
+    $('#access_log').append(e.data);
+  };
+  es_access.onerror = function(e) {
+    console.log(e.message);
+  };
+.row
+  .col-lg-6
+    .panel.panel-default
+      .panel-heading
+        %h3.panel-title
+          Server Access Log
+      .panel-body
+        %pre#access_log
+  .col-lg-6
+    .panel.panel-default
+      .panel-heading
+        %h3.panel-title
+          Server Error Log
+      .panel-body
+        %pre#error_log

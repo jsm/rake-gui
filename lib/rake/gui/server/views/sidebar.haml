@@ -1,0 +1,26 @@
+/ Sidebar Menu Items - These collapse to the responsive navigation menu on small screens
+.collapse.navbar-collapse.navbar-ex1-collapse
+  %ul.nav.navbar-nav.side-nav
+    %li
+      = haml :searchbar
+    %li{class: ('active' if @page_name == 'Dashboard')}
+      %a{href: '/dashboard'}
+        %i.fa.fa-fw.fa-dashboard
+        Dashboard
+    %li{class: ('active' if @page_name == 'Console')}
+      %a{href: '/console'}
+        %i.fa.fa-fw.fa-desktop
+        Console
+    %li{class: ('active' if @page_name == 'Configuration')}
+      %a{href: '/configuration'}
+        %i.fa.fa-fw.fa-wrench
+        Configuration
+    %li{class: ('active' if @page_name == 'Server Logs')}
+      %a{href: '/server_logs'}
+        %i.fa.fa-fw.fa-server
+        Server Logs
+    %li{class: ('active' if @page_name == 'About')}
+      %a{href: '/about'}
+        %i.fa.fa-fw.fa-file
+        About
+/ /.navbar-collapse

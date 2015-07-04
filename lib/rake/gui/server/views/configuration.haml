@@ -1,0 +1,13 @@
+.table-responsive
+  %table.table.table-hover.table-striped
+    %thead
+      %tr
+        %th Setting
+        %th Attribute
+    %tbody
+      - @configurations.each do |k, v|
+        %tr
+          %td
+            = k
+          %td
+            = v

@@ -1,0 +1,21 @@
+!!!
+%html{:lang => "en"}
+  %head
+    = haml :head
+  %body
+    #wrapper
+      #page-wrapper
+        = haml :header
+        .container-fluid
+          / Page Heading
+          .row
+            .col-lg-12
+              %h1.page-header
+                = @page_name
+                %small
+                  = @page_description
+              = haml :breadcrumb
+          = yield
+        / /.container-fluid
+      / /#page-wrapper
+    / /#wrapper

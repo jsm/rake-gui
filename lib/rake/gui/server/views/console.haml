@@ -1,0 +1,29 @@
+:javascript
+  var es = new EventSource('/stream');
+  es.onmessage = function(e) {
+    $('#main_log').append(e.data);
+  };
+  es.onerror = function(e) {
+    console.log(e.message);
+  };
+  function load_subtasks() {
+    $.get('/subtasks/#{@console_path}', '', function(data) {
+      $('#top-level-tasks').html(data);
+    });
+    setTimeout(load_subtasks, 1000);
+  }
+  load_subtasks();
+.row
+  .col-lg-3
+    .panel.panel-default
+      .panel-heading
+        %h3.panel-title
+          Top-Level Tasks
+      #top-level-tasks.panel-body
+  .col-lg-9
+    .panel.panel-default
+      .panel-heading
+        %h3.panel-title
+          Full Output
+      .panel-body
+        %pre#main_log

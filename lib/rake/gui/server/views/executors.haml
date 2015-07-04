@@ -1,0 +1,22 @@
+.row
+  .col-lg-4
+    %h5
+      Successful
+      = "(#{@executors[:successful].size})"
+    - @executors[:successful].each do |executor|
+      %a{href: executor[:url]}
+        .executor.executor-successful{style: executor[:style]}
+  .col-lg-4
+    %h5
+      Failed
+      = "(#{@executors[:failed].size})"
+    - @executors[:failed].each do |executor|
+      %a{href: executor[:url]}
+        .executor.executor-failed{style: executor[:style]}
+  .col-lg-4
+    %h5
+      Running
+      = "(#{@executors[:running].size})"
+    - @executors[:running].each do |executor|
+      %a{href: executor[:url]}
+        .executor.executor-running{style: executor[:style]}
