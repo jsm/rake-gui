@@ -1,0 +1,13 @@
+!!!
+%html{:lang => "en"}
+  %head
+    = haml :head
+  %body
+    #wrapper
+      #page-wrapper
+        = haml :header
+        .container-fluid
+          = yield
+        / /.container-fluid
+      / /#page-wrapper
+    / /#wrapper

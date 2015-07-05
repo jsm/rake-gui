@@ -11,8 +11,13 @@ Gem::Specification.new do |s|
   s.license     = 'MIT'
 
   # Runtime Dependencies
+  s.add_runtime_dependency 'activesupport', '~> 4.1.0'
   s.add_runtime_dependency 'colorize', '~> 0.7.0'
+  s.add_runtime_dependency 'haml', '~> 4.0.0'
+  s.add_runtime_dependency 'sinatra', '~> 1.4.0'
 
   # Development Dependencies
   s.add_development_dependency 'rake', '~> 10.4.0'
+
+  s.executables << 'rakeg'
 end

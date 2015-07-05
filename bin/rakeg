@@ -25,9 +25,12 @@
 begin
   require 'rubygems'
   gem 'rake'
+  gem 'rake-gui'
 rescue LoadError
 end
 
 require 'rake'
+require 'rake/gui'
 
+Rake::Gui.activate
 Rake.application.run

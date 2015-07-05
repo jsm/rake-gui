@@ -1,3 +1,4 @@
+require_relative 'patches/enumerable.rb'
 require_relative 'patches/thread.rb'
 require_relative 'patches/rake/application.rb'
 require_relative 'patches/rake/dsl.rb'

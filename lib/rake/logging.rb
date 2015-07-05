@@ -1,6 +1,10 @@
-require 'set'
-require 'thread'
+require 'active_support/ordered_hash'
 require 'colorize'
+require 'thread'
+require 'set'
+
+require_relative 'gui.rb'
+require_relative 'gui/db.rb'
 
 # Thread Safe Logging Library
 module Rake::Logging
@@ -428,50 +432,43 @@ module Rake::Logging
   module DSLs
 
     def puts_override(*args)
-      LockedPrintQueue.puts(*args)
+      if Rake::Gui.active?
+        Rake::Gui::DB.puts(*args)
+      else
+        LockedPrintQueue.puts(*args)
+      end
     end
 
     def print_override(*args)
-      LockedPrintQueue.print(*args)
-    end
-
-    def log(text, style=:puts)
-      if style == :print
-        LockedPrintQueue.print text.colorize(:cyan)
+      if Rake::Gui.active?
+        Rake::Gui::DB.print(*args)
       else
-        LockedPrintQueue.puts text.colorize(:cyan)
+        LockedPrintQueue.print(*args)
       end
     end
 
-    def info(text, style=:puts)
-      if style == :print
-        LockedPrintQueue.print text.colorize(:green)
-      else
-        LockedPrintQueue.puts text.colorize(:green)
+    LEVEL_MAP = {
+      log: :cyan,
+      info: :green,
+      warning: :yellow,
+      debug: :magenta,
+      error: :red,
+    }
+
+    # DSLs for logging output with different colors
+    LEVEL_MAP.each do |level, color|
+      define_method(level) do |text, style=:puts|
+        if style == :print
+          print_override text.colorize(color)
+        else
+          puts_override text.colorize(color)
+        end
       end
     end
 
-    def warning(text, style=:puts)
-      if style == :print
-        LockedPrintQueue.print text.colorize(:yellow)
-      else
-        LockedPrintQueue.puts text.colorize(:yellow)
-      end
-    end
-
-    def debug(text, style=:puts)
-      if style == :print
-        LockedPrintQueue.print text.colorize(:magenta) if Rake.verbose
-      else
-        LockedPrintQueue.puts text.colorize(:magenta) if Rake.verbose
-      end
-    end
-
-    def error(text, style=:puts)
-      if style == :print
-        LockedPrintQueue.print text.colorize(:red)
-      else
-        LockedPrintQueue.puts text.colorize(:red)
+    # Override the debug method to not print if verbose is not on
+    unless Rake.verbose
+      def debug(text, style=:puts)
       end
     end
   end
@@ -480,11 +477,10 @@ module Rake::Logging
     # Flush the Print Queue at the end of each iteration
     lambda do |*args|
       begin
-        yield *args if block_given?
+        block.call(*args) if block
       ensure
         LockedPrintQueue.flush
       end
     end
   end
-
 end
