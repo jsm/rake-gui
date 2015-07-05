@@ -1,0 +1,7 @@
+%ol.breadcrumb
+  - @breadcrumbs.each_with_index do |breadcrumb, i|
+    %li{class: ('active' if i == @breadcrumbs.size-1)}
+      - if i == 0
+        %i.fa{class: "fa-#{@breadcrumb_fa}"}
+      %a{href: breadcrumb[:url]}
+        = breadcrumb[:text]

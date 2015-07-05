@@ -10,9 +10,10 @@ module Rake::DSL
   alias :print :print_override
 
   def current_invocation_chain
-    bottom_up_threads = ([Thread.current] + Thread.current.lineage.reverse)
-    bottom_up_threads.each do |thread|
-      return thread[:invocation_chain] if thread[:invocation_chain]
+    promise = Thread.current.promise
+    while promise
+      return promise.invocation_chain if promise.invocation_chain
+      promise = promise.parent
     end
   end
 end

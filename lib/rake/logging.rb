@@ -6,29 +6,51 @@ require 'set'
 require_relative 'gui.rb'
 require_relative 'gui/db.rb'
 
-# Thread Safe Logging Library
+# Promise/Thread Safe Logging Library
 module Rake::Logging
   # Flag to turn on output to help in debugging
   DEBUG=false
 
+  module StdoutWrapper
+    extend self
+
+    def puts(*args)
+      if Rake::Gui.active?
+        args.each do |arg|
+          Rake::Gui::DB.print_to_full_log(arg.to_s << "\n")
+        end
+      else
+        $stdout.puts(*args)
+      end
+    end
+
+    def print(*args)
+      if Rake::Gui.active?
+        Rake::Gui::DB.print_to_full_log(args.join.to_s)
+      else
+        $stdout.print(*args)
+      end
+
+    end
+  end
+
   class PrintQueue
 
     def initialize
-      @thread_newline = {}
+      @promise_newline = {}
       @queue = ActiveSupport::OrderedHash.new
       @locked_output = ''
       @main_newline = false
       @priority_newline = {}
       @retrospective_newline = {}
       @retrospective_queue_newline = {}
-      @main_thread = Thread.current.object_id
       super
     end
 
     # Wrapper on stdout
     def stdout
       $stdout.print "{s#{caller.first.split(':', 3)[1]}}" if DEBUG
-      return $stdout
+      return StdoutWrapper
     end
 
     # Newline wrapper
@@ -42,12 +64,12 @@ module Rake::Logging
     def prepend_newline?
       # Prepend a newline if one of the following is true:
       # 1. We requested a newline for the main thread, and we are in the main thread.
-      # 2. We requested a newline for the priority thread, and we are in the priority thread.
-      # 3. The current thread has requested a newline
+      # 2. We requested a newline for the priority promise, and we are in the priority promise.
+      # 3. The current promise has requested a newline
       if main_thread? && @main_newline
         @main_newline = false
         return true
-      elsif priority_thread? && final_newline?
+      elsif priority_promise? && final_newline?
         cancel_priority_newline
         return true
       elsif self.newline?
@@ -58,7 +80,7 @@ module Rake::Logging
       end
     end
 
-    # Puts string(s) in a Thread-Safe MAnner
+    # Puts string(s) in a Promise-Safe MAnner
     def puts(*args)
       # Build the proper string to print
       to_print = ''
@@ -76,7 +98,7 @@ module Rake::Logging
       self.print_or_queue(to_print, !prepend_newline)
     end
 
-    # Print string(s) in a Thread-Safe Manner
+    # Print string(s) in a Promise-Safe Manner
     def print(*args)
       # Build the proper string to print
       to_print = ''
@@ -90,7 +112,7 @@ module Rake::Logging
       # Request a newline on the next puts
       if main_thread?
         @main_newline = true
-      elsif priority_thread?
+      elsif priority_promise?
         request_priority_newline
       else
         self.request_newline
@@ -99,27 +121,27 @@ module Rake::Logging
 
     # Decide to print now, or queue for printing later
     def print_or_queue(str, possible_newline=false)
-      # Create the thread queue for this thread
-      @queue[Thread.current.object_id] ||= { :output => '' }
+      # Create the promise queue for this promise
+      @queue[Thread.current.promise] ||= { :output => '' }
 
-      # If the parent thread has a queue, add this thread to it's children
-      parent_id = Thread.current.parent.object_id
-      if @queue[parent_id]
-        @queue[parent_id][:children] ||= []
-        @queue[parent_id][:children] << Thread.current.object_id
+      # If the parent promise has a queue, add this promise to it's children
+      parent = Thread.current.promise.parent
+      if @queue[parent]
+        @queue[parent][:children] ||= []
+        @queue[parent][:children] << Thread.current.promise
       end
 
-      # Print string if we're in the main thread or the priority thread
-      if main_thread? || priority_thread?
-        # If this is our first call as a priority thread, flush our parent
-        flush_parent unless @queue[Thread.current.object_id][:priority]
-        @queue[Thread.current.object_id][:priority] = true
+      # Print string if we're in the main thread or the priority promise
+      if main_thread? || priority_promise?
+        # If this is our first call as a priority promise, flush our parent
+        flush_parent unless @queue[Thread.current.promise][:priority]
+        @queue[Thread.current.promise][:priority] = true
 
         flush_current
 
         # Indicators on thread for debugging
         $stdout.print "{M}" if main_thread? && DEBUG
-        $stdout.print "{P}" if priority_thread? && DEBUG
+        $stdout.print "{P}" if priority_promise? && DEBUG
 
         # Print the string
         stdout.print str
@@ -127,11 +149,11 @@ module Rake::Logging
       # Otherwise, save string to print queue
       else
         # If we're saving to the print queue, we'll want to notify that we might retrospectively want a prepended newline
-        request_retrospective_newline(Thread.current.object_id) if possible_newline && @queue.fetch(Thread.current.object_id)[:output].empty?
-        @queue[Thread.current.object_id][:output] << "{Q}" if DEBUG
+        request_retrospective_newline(Thread.current.promise) if possible_newline && @queue.fetch(Thread.current.promise)[:output].empty?
+        @queue[Thread.current.promise][:output] << "{Q}" if DEBUG
 
         # Add to print queue
-        @queue[Thread.current.object_id][:output] << str
+        @queue[Thread.current.promise][:output] << str
       end
     end
 
@@ -140,7 +162,7 @@ module Rake::Logging
       return unless str
 
       # Check if we might want to retrospectively add a newline
-      if cancel_retrospective_newline(Thread.current.object_id)
+      if cancel_retrospective_newline(Thread.current.promise)
         # We want to retrospective add a newline
         # If the locked_output is empty though, it's still too early to tell
         if @locked_output.empty?
@@ -188,23 +210,23 @@ module Rake::Logging
 
     def flush_current
       # Print our thread-queued output
-      if @queue.fetch(Thread.current.object_id,{})[:output].present?
-        stdout.print newline if cancel_retrospective_newline(Thread.current.object_id)
-        stdout.print @queue.fetch(Thread.current.object_id, {}).delete(:output)
+      if @queue.fetch(Thread.current.promise,{})[:output].present?
+        stdout.print newline if cancel_retrospective_newline(Thread.current.promise)
+        stdout.print @queue.fetch(Thread.current.promise, {}).delete(:output)
       end
     end
 
-    def flush_parent(parent_id=Thread.current.parent.object_id)
+    def flush_parent(parent=Thread.current.promise.parent)
       # Print our parent-queued output
-      if @queue.fetch(parent_id,{})[:output].present?
+      if @queue.fetch(parent,{})[:output].present?
         if cancel_retrospective_newline && final_newline?
           stdout.print newline
-          set_newline(true, parent_id)
+          set_newline(true, parent)
         end
         $stdout.print "FLUSHPARENT:" if DEBUG
-        stdout.print @queue.fetch(parent_id, {})[:output]
-        @queue[parent_id][:output] = ''
-        @final_source = parent_id
+        stdout.print @queue.fetch(parent, {})[:output]
+        @queue[parent][:output] = ''
+        @final_source = parent
       end
     end
 
@@ -217,25 +239,25 @@ module Rake::Logging
           @main_newline = false
         end
         return
-      # If we're in the priority thread, we can print our thread-queued output
+      # If we're in the priority promise, we can print our promise-queued output
       # We can also flush the pending output
-      # AND we can print any output that's been queued by the next thread in line
-      elsif priority_thread?
+      # AND we can print any output that's been queued by the next promise in line
+      elsif priority_promise?
         request_priority_newline if final_newline?
         # Set the final newline
         @final_source = :priority
 
-        # Save the parent thread id
-        parent_id = Thread.current.parent.object_id
+        # Save the parent promise
+        parent = Thread.current.promise.parent
 
         # Get the next queued
-        next_queued_id, next_queued_output = next_queued
+        next_queued_promise, next_queued_output = next_queued
 
         flush_current
 
         # Either print parent-queued or flush pending
-        if @queue[parent_id]
-          flush_parent(parent_id)
+        if @queue[parent]
+          flush_parent(parent)
         else
           # Flush the pending output
           if queued_output?
@@ -249,45 +271,45 @@ module Rake::Logging
 
         # Print & clear the next thread's queued output
         if next_queued_output && next_queued_output[:output].present?
-          if next_queued_output && cancel_retrospective_newline(next_queued_id) && final_newline?
-            set_newline(true, next_queued_id)
+          if next_queued_output && cancel_retrospective_newline(next_queued_promise) && final_newline?
+            set_newline(true, next_queued_promise)
             stdout.print newline
           end
           $stdout.print "FLUSHNEXT:" if DEBUG
           stdout.print next_queued_output[:output]
           next_queued_output[:output] = ''
-          @final_source = next_queued_id
+          @final_source = next_queued_promise
         end
 
         # Delete our place in the queue
         self.unqueue
 
-        # If we're a child thread, request a newline for the next in the parent thread
-        if @queue[parent_id]
-          request_newline(parent_id) if final_newline?
-          @final_source = parent_id
-        elsif parent_id == @main_thread && @queue.empty?
+        # If we're a child promise, request a newline for the next in the parent thread
+        if @queue[parent]
+          request_newline(parent) if final_newline?
+          @final_source = parent
+        elsif main_thread?(parent) && @queue.empty?
           @main_newline = final_newline?
           @final_source = :main
         end
 
-      # If we're not in the main or priority thread, we can't print immideately, so we add our thread's output to pending
+      # If we're not in the main or priority promise, we can't print immideately, so we add our thread's output to pending
       else
-        # Unless, we're a child thread, then add our thread's output to it's parent's output
-        parent_id = Thread.current.parent.object_id
-        if parent_queue = @queue[parent_id]
-          if cancel_newline(parent_id) && cancel_retrospective_newline(Thread.current.object_id)
+        # Unless, we're a child promise, then add our promise's output to it's parent's output
+        parent = Thread.current.promise.parent
+        if parent_queue = @queue[parent]
+          if cancel_newline(parent) && cancel_retrospective_newline(Thread.current.promise)
             if parent_queue[:output].present?
               parent_queue[:output] << newline
             else
-              @queue[Thread.current.object_id][:retrospective_newline] = true
+              @queue[Thread.current.promise][:retrospective_newline] = true
             end
-            request_retrospective_newline if cancel_retrospective_newline(Thread.current.object_id)
+            request_retrospective_newline if cancel_retrospective_newline(Thread.current.promise)
           end
-          parent_queue[:output] << @queue.fetch(Thread.current.object_id, {}).fetch(:output, '')
+          parent_queue[:output] << @queue.fetch(Thread.current.promise, {}).fetch(:output, '')
         else
-          self.queue_output @queue.fetch(Thread.current.object_id, {}).fetch(:output, '')
-          # If we requested a newline for the thread, request it retroactively, since the thread is finished.
+          self.queue_output @queue.fetch(Thread.current.promise, {}).fetch(:output, '')
+          # If we requested a newline for the promise, request it retroactively, since the promise is finished.
           request_retrospective_queue_newline if newline?
         end
 
@@ -296,10 +318,10 @@ module Rake::Logging
       end
 
       # Set parent's settings
-      request_newline(Thread.current.parent.object_id) if newline?
-      request_priority_newline if cancel_priority_newline(Thread.current.object_id)
-      request_retrospective_newline if cancel_retrospective_newline(Thread.current.object_id)
-      request_retrospective_queue_newline if cancel_retrospective_queue_newline(Thread.current.object_id)
+      request_newline(Thread.current.promise.parent) if newline?
+      request_priority_newline if cancel_priority_newline(Thread.current.promise)
+      request_retrospective_newline if cancel_retrospective_newline(Thread.current.promise)
+      request_retrospective_queue_newline if cancel_retrospective_queue_newline(Thread.current.promise)
     end
 
     # Print a final newline if necessary
@@ -312,51 +334,51 @@ module Rake::Logging
       # Only do this as the main thread
       return unless main_thread?
 
-      @queue.each do |thread_id, info|
+      @queue.each do |promise, info|
         stdout.print info[:output]
       end
-      @thread_newline.clear
+      @promise_newline.clear
       @queue.clear
     end
 
-    def unqueue(thread=Thread.current)
+    def unqueue(promise=Thread.current.promise)
       # Delete our place in the queue
-      @queue.delete(thread.object_id)
-      parent_id = thread.parent.object_id
-      if parent_queue = @queue[parent_id]
-        parent_queue.fetch(:children, {}).delete(thread.object_id)
+      @queue.delete(promise)
+      parent = promise.parent
+      if parent_queue = @queue[parent]
+        parent_queue.fetch(:children, {}).delete(promise)
       end
     end
 
     def next_queued
-      # If we're the first thread in queue, return the next thread in queue
-      return [@queue.keys[1], @queue.values[1]] if @queue.first && @queue.first.first == Thread.current.object_id
+      # If we're the first promise in queue, return the next promise in queue
+      return [@queue.keys[1], @queue.values[1]] if @queue.first && @queue.first.first == Thread.current.promise
 
-      # Otherwise, if we have a parent, return the sibling thread
-      parent_id = Thread.current.parent.object_id
-      parent_queue = @queue.fetch(parent_id, {})
+      # Otherwise, if we have a parent, return the sibling promise
+      parent = Thread.current.promise.parent
+      parent_queue = @queue.fetch(parent, {})
       return nil unless parent_queue[:siblings].present?
-      return  parent_queue[:siblings][parent_queue[:siblings].index(Thread.current.object_id)]
+      return  parent_queue[:siblings][parent_queue[:siblings].index(Thread.current.promise)]
     end
 
     # Returns true if currently in the thread that instantiated the PrintQueue
     def main_thread?(thread=Thread.current)
-      return thread.object_id == @main_thread
+      return thread.object_id == Thread.main
     end
 
     # Returns true if the queue is empty, or our thread has the first place in the queue
-    def priority_thread?(thread=Thread.current)
-      return false if main_thread?(thread)
+    def priority_promise?(promise=Thread.current.promise)
+      return false if promise == nil
       # If queue is empty, nothing has been added yet, so we'll be the first to do so
       return true if @queue.empty?
 
       # Start at the top of the queue
       level = @queue.first
       loop do
-        current_thread, current_queue = level
+        current_promise, current_queue = level
 
-        # Return true if the current thread is the first in queue
-        return true if current_thread == thread.object_id
+        # Return true if the current promise is the first in queue
+        return true if current_promise == promise
 
         # Otherwise, recursively check if we might be the first child of the first in queue
         if current_queue[:children].present?
@@ -371,41 +393,41 @@ module Rake::Logging
       return false
     end
 
-    # Returns true if the current thread has requested a newline
-    def newline?(thread_id=Thread.current.object_id)
-      return @thread_newline[thread_id] == true
+    # Returns true if the current promise has requested a newline
+    def newline?(promise=Thread.current.promise)
+      return @promise_newline[promise] == true
     end
 
-    # Request a newline for the current thread
-    def request_newline(thread_id=Thread.current.object_id)
-      return @thread_newline[thread_id] = true
+    # Request a newline for the current promise
+    def request_newline(promise=Thread.current.promise)
+      return @promise_newline[promise] = true
     end
 
-    # Request a newline for the current thread
-    def set_newline(value, thread_id=Thread.current.object_id)
-      return @thread_newline[thread_id] = value == true
+    # Request a newline for the current promise
+    def set_newline(value, promise=Thread.current.promise)
+      return @promise_newline[promise] = value == true
     end
 
-    # Cancel any requests the current thread has made for a newline
-    def cancel_newline(thread_id=Thread.current.object_id)
-      return @thread_newline.delete(thread_id)
+    # Cancel any requests the current promise has made for a newline
+    def cancel_newline(promise=Thread.current.promise)
+      return @promise_newline.delete(promise)
     end
 
     [:priority, :retrospective, :retrospective_queue].each do |nl|
-      define_method("#{nl}_newline?") do |thread=Thread.current.parent.object_id|
-        return instance_variable_get("@#{nl}_newline")[thread] == true
+      define_method("#{nl}_newline?") do |promise=Thread.current.promise.parent|
+        return instance_variable_get("@#{nl}_newline")[promise] == true
       end
 
-      define_method("request_#{nl}_newline") do |thread=Thread.current.parent.object_id|
-        return instance_variable_get("@#{nl}_newline")[thread] = true
+      define_method("request_#{nl}_newline") do |promise=Thread.current.promise.parent|
+        return instance_variable_get("@#{nl}_newline")[promise] = true
       end
 
-      define_method("set_#{nl}_newline") do |value, thread=Thread.current.parent.object_id|
-        return instance_variable_get("@#{nl}_newline")[thread] = value == true
+      define_method("set_#{nl}_newline") do |value, promise=Thread.current.promise.parent|
+        return instance_variable_get("@#{nl}_newline")[promise] = value == true
       end
 
-      define_method("cancel_#{nl}_newline") do |thread=Thread.current.parent.object_id|
-        return instance_variable_get("@#{nl}_newline").delete(thread)
+      define_method("cancel_#{nl}_newline") do |promise=Thread.current.promise.parent|
+        return instance_variable_get("@#{nl}_newline").delete(promise)
       end
     end
   end
@@ -432,19 +454,13 @@ module Rake::Logging
   module DSLs
 
     def puts_override(*args)
-      if Rake::Gui.active?
         Rake::Gui::DB.puts(*args)
-      else
         LockedPrintQueue.puts(*args)
-      end
     end
 
     def print_override(*args)
-      if Rake::Gui.active?
-        Rake::Gui::DB.print(*args)
-      else
-        LockedPrintQueue.print(*args)
-      end
+      Rake::Gui::DB.print(*args)
+      LockedPrintQueue.print(*args)
     end
 
     LEVEL_MAP = {

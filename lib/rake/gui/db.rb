@@ -20,6 +20,12 @@ module Rake::Gui
       end
     end
 
+    def print_to_full_log(str)
+      open(File.join(Rake::Gui.working_directory, 'full.log'), 'a') do |f|
+        f << str
+      end
+    end
+
     def generate_storage_path
       if execution_id = Thread.current.execution_id
         filename = "#{execution_id}.log"
