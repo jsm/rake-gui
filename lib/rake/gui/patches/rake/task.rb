@@ -9,7 +9,14 @@ class ::Rake::Task
     old_chain = Thread.current.promise.invocation_chain
     new_chain = ::Rake::InvocationChain.append(self, invocation_chain)
     Thread.current.promise.invocation_chain = new_chain
-    __invoke_with_call_chain__(task_args, invocation_chain)  # And call the original invocation
+    begin
+      Rake::Gui::DB.generate_storage_path
+      __invoke_with_call_chain__(task_args, invocation_chain)  # And call the original invocation
+      Rake::Gui::DB.record_successful_task
+    rescue => e
+      Rake::Gui::DB.record_failed_task
+      raise e, e.message, e.backtrace
+    end
     Thread.current.promise.invocation_chain = old_chain
   end
 end

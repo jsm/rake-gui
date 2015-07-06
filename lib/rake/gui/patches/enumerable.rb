@@ -20,7 +20,14 @@ module Enumerable
         else
           Thread.current.reset_execution_id
         end
-        block.call(*args) if block
+        begin
+          Rake::Gui::DB.generate_storage_path
+          block.call(*args) if block
+          Rake::Gui::DB.record_successful_executor
+        rescue => e
+          Rake::Gui::DB.record_failed_executor
+          raise e, e.message, e.backtrace
+        end
         Thread.current.clear_execution_id
       end
 

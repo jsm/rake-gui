@@ -1,0 +1,47 @@
+:javascript
+  var es = new EventSource('#{@log_url}');
+  es.onmessage = function(e) {
+    $('#output').append(e.data);
+  };
+  es.onerror = function(e) {
+    console.log(e.message);
+  };
+  function load_executors() {
+    $.get('/executors/#{@console_path}', '', function(data) {
+      $('#executor_map').html(data);
+    });
+    setTimeout(load_executors, 1000);
+  }
+  load_executors();
+  function load_subtasks() {
+    $.get('/subtasks/#{@console_path}', '', function(data) {
+      $('#subtasks').html(data);
+    });
+    setTimeout(load_subtasks, 1000);
+  }
+  load_subtasks();
+.row
+  .col-lg-12
+    .panel.panel-default
+      .panel-heading
+        %h3.panel-title
+          Executors
+      #executor_map.panel-body
+.row
+  .col-lg-3
+    .panel.panel-default
+      .panel-heading
+        %h3.panel-title
+          Sub-Tasks
+      #subtasks.panel-body
+  .col-lg-9
+    .panel.panel-default
+      .panel-heading
+        %h3.panel-title
+          - if @executor_id
+            Output for executor
+            = @executor_id
+          - else
+            Main Output
+      .panel-body
+        %pre#output

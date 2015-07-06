@@ -1,0 +1,5 @@
+%ul.list-group
+  - @subtasks.each do |task|
+    %li.list-group-item{style: task[:style]}
+      %a{href: task[:url]}
+        = task[:name]

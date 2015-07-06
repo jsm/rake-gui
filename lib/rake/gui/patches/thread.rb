@@ -9,8 +9,8 @@ class ::Thread
      return self['execution_id']
    end
 
-   def execution_id=
-     return self['execution_id']
+   def execution_id=(manual_id)
+     self['execution_id'] = manual_id
    end
 
    def clear_execution_id
