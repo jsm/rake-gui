@@ -3,7 +3,10 @@ require 'sinatra'
 require 'haml'
 
 require_relative 'helpers.rb'
+require_relative 'render.rb'
 require_relative 'lib/log_stream.rb'
+
+include Render
 
 raise 'Invalid Number of Arguments' if ARGV.size != 3
 working_directory, host, port = ARGV
@@ -21,25 +24,15 @@ get '/' do
 end
 
 get '/about' do
-  @page_name = 'About'
-  @page_description = 'About this Application'
-  @breadcrumb_fa = 'file'
-  @breadcrumbs = [
-    { text: 'About', url: '/about' }
-  ]
-
-  haml :about
+  about_page
 end
 
 get '/configuration' do
-  @page_name = 'Configuration'
-  @page_description = 'View GUI settings'
-  @breadcrumb_fa = 'wrench'
-  @breadcrumbs = [
-    { text: 'Configuration', url: '/configuration' }
-  ]
-
-  haml :configuration
+  configuration_page(
+    'Host' => settings.bind,
+    'Port' => settings.port,
+    'Working Directory' => settings.working_directory,
+  )
 end
 
 get '/dashboard' do

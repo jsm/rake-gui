@@ -1,6 +1,8 @@
 / Sidebar Menu Items - These collapse to the responsive navigation menu on small screens
 .collapse.navbar-collapse.navbar-ex1-collapse
   %ul.nav.navbar-nav.side-nav
+    %li
+      = haml :searchbar
     %li{class: ('active' if @page_name == 'Dashboard')}
       %a{href: '/dashboard'}
         %i.fa.fa-fw.fa-dashboard

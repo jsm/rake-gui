@@ -6,6 +6,10 @@
 %script{:src => "/js/plugins/morris/raphael.min.js"}
 %script{:src => "/js/plugins/morris/morris.min.js"}
 %script{:src => "/js/plugins/morris/morris-data.js"}
+- if @customjs
+  - @customjs.each do |js_path|
+    %script{:src => js_path}
+
 %meta{:charset => "utf-8"}
 %meta{:content => "IE=edge", "http-equiv" => "X-UA-Compatible"}
 %meta{:content => "width=device-width, initial-scale=1", :name => "viewport"}

@@ -38,7 +38,18 @@ module Rake::ShellExecutors
     return state
   end
 
+  def self.stateful_print(output)
+    if output.last == "\n"
+      puts output
+    else
+      print output
+    end
+  end
+
   def self.run_bash_command(cmd, options)
+    # Options Configuration
+    options[:breakpoints] = Array(options[:breakpoints]) if options[:breakpoints]
+
     # Keep track of printing state
     state = {
       :output => '',
@@ -52,24 +63,29 @@ module Rake::ShellExecutors
       input_arr=[]
 
       # Run a virtual shell, and return exit code
-      ::PTY.spawn %Q{bash -o pipefail -c#{options[:login] ? 'l' : ''} "#{cmd.gsub('"', '\"').gsub('$', '\$')}"} do |r, w, pid|
+      ::PTY.spawn(*[
+        'bash',
+        options[:login] ? '-l' : nil,
+        options[:debug] ? '-x' : nil,
+        '-o', 'pipefail',
+        '-c', cmd
+      ].compact) do |r, w, pid|
         begin
           r.sync
           r.each_char do |c|
             state = Rake::ShellExecutors.output c, state, options
             # Only display output if flag is set
             if options[:display_output]
-              print state[:output] unless state[:output].empty?
+              stateful_print state[:output] unless state[:output].empty?
               state[:output].replace('')
             end
             if options[:breakpoints]
               input_arr << c
-              input_arr.shift if input_arr.size > 10
+              input_arr.shift if input_arr.size > options[:breakpoints].map(&:size).max
               is_breakpoint = Array(options[:breakpoints]).any? { |w| input_arr.join("") =~ /#{w}/ }
               if is_breakpoint
                 input_arr=[]
-                user_input = STDIN.gets.strip
-                w.puts user_input
+                w.puts STDIN.gets.strip
               end
             end
           end
@@ -80,9 +96,9 @@ module Rake::ShellExecutors
           e.backtrace.each{|trace| puts trace}
         ensure
           if options[:display_output]
-            print state[:output] unless state[:output].empty?
+            stateful_print state[:output] unless state[:output].empty?
             state[:output].replace('')
-            print if state[:newline]
+            puts if state[:newline]
           end
           exit_status = ::Process.wait2(pid).last.exitstatus
         end
@@ -177,8 +193,9 @@ module Rake::ShellExecutors
       # Determine if it succeeded
       succeeded = result[:status] == 0
 
-      # If it didn't succeed, we want to display the output. Unless we're already shoing output
-      puts result[:output].colorize(:yellow) if !succeeded && !options.show_output && !options.rescue
+      # If it didn't succeed, we want to display the output. Unless we're already showing output
+      warning result[:output] if !succeeded && !options.show_output && !options.rescue
+
       # If It didn't succeed, or verbose is on, we want to display the command the was run
       puts cmd.colorize(succeeded ? :green : :red) if (!succeeded && !options.rescue) || options.verbose
 
@@ -193,8 +210,11 @@ module Rake::ShellExecutors
       end
 
       # If the command didn't succeed, raise an error unless we're rescuing
-      raise BashExecutionException unless succeeded || rescuing
-      return succeeded
+      exception = BashExecutionException.new("#{cmd} returned '#{result[:output].chomp}'")
+      exception.set_backtrace(caller)
+      raise exception unless succeeded || rescuing
+
+      return succeeded # Boolean
     end
   end
 end

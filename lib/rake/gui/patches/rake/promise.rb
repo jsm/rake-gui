@@ -14,7 +14,7 @@ class Rake::Promise
     @parent = Thread.current.promise
   end
 
-   alias_method "__chore__", "chore"
+   alias_method :__chore__, :chore
 
    # Properly set the parent thread
    def chore(*args, &block)

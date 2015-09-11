@@ -454,8 +454,8 @@ module Rake::Logging
   module DSLs
 
     def puts_override(*args)
-        Rake::Gui::DB.puts(*args)
-        LockedPrintQueue.puts(*args)
+      Rake::Gui::DB.puts(*args)
+      LockedPrintQueue.puts(*args)
     end
 
     def print_override(*args)
